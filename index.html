@@ -111,6 +111,10 @@ table.ov { width: 100%; border-collapse: collapse; font-size: 13.5px; font-varia
 .fld textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; resize: vertical; }
 .printview .small { color: #444; }
 #photoBox p { margin: 10px 0; } #photoBox .btn { display: inline-block; text-decoration: none; }
+.letters { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; padding-bottom: 8px; }
+.letter { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 20px; font-weight: 800; color: var(--ink); cursor: pointer; }
+.letter:hover:not(:disabled) { border-color: var(--mint); background: var(--mint-soft); color: var(--mint-ink); }
+.letter:disabled { opacity: .3; cursor: default; text-decoration: line-through; }
 
 </style></head>
 <body>
@@ -295,6 +299,23 @@ function ago(iso) {
   return s < 60 ? '방금' : s < 3600 ? Math.floor(s / 60) + '분 전' : Math.floor(s / 3600) + '시간 전';
 }
 
+// 그룹은 A~Z 중에서 고른다. 이미 있는 글자는 고를 수 없다.
+var LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+function sortGroups() { if (S && S.groups) S.groups.sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); }); }
+function pickLetter(title, onPick) {
+  var used = (S && S.groups || []).map(function (g) { return g.name; });
+  var body = $('sheetBody'); body.textContent = '';
+  body.appendChild(h('div', { class: 'sheet-head' }, [h('h3', { text: title }), h('p', { class: 'muted', text: '이미 있는 그룹은 고를 수 없어요.' })]));
+  var grid = h('div', { class: 'letters' });
+  LETTERS.forEach(function (L) {
+    var taken = used.indexOf(L) >= 0;
+    grid.appendChild(h('button', { type: 'button', class: 'letter', disabled: taken, 'aria-label': L + ' 그룹' + (taken ? ' (이미 있음)' : ''), text: L, onclick: function () { closeSheet(); onPick(L); } }));
+  });
+  body.appendChild(grid);
+  $('sheetFoot').textContent = '';
+  $('sheet').hidden = false; document.body.classList.add('noscroll');
+}
+
 var APP_URL = 'index.html';
 var CLS = '', GROUP = '', TAB = 'menu';
 try { CLS = localStorage.getItem('jb-cls') || ''; GROUP = localStorage.getItem('jb-group') || ''; $('who').value = localStorage.getItem('jb-who') || ''; } catch (e) {}
@@ -311,9 +332,9 @@ $('cls').addEventListener('change', function () { CLS = $('cls').value; GROUP = 
 $('newGroupBtn').addEventListener('click', function () {
   if (!CLS) { toast('학급을 먼저 골라 주세요.', true); return; }
   if (needWho()) return;
-  var name = prompt('새 그룹 이름을 적어 주세요 (예: A, 떡볶이1조)');
-  if (!name) return;
-  api('createGroup', { name: name }, function () { GROUP = name.trim().slice(0, 12); remember(); toast(GROUP + ' 그룹을 만들었어요.'); });
+  pickLetter(CLS + ' 새 그룹 고르기', function (name) {
+    api('createGroup', { name: name }, function () { GROUP = name; remember(); toast(GROUP + ' 그룹을 만들었어요.'); });
+  });
 });
 document.querySelectorAll('.tabs [data-tab]').forEach(function (b) {
   b.addEventListener('click', function () { TAB = b.dataset.tab; paint(); window.scrollTo(0, $('tab-' + TAB).offsetTop - 70); });
@@ -329,6 +350,7 @@ function paint() {
   }
   sel.value = CLS;
   if (!S) return;
+  sortGroups();
   $('storeName').textContent = S.settings.store || '';
   $('live').textContent = '실시간 · ' + new Date(S.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   var locked = S.totals && S.totals.locked;
